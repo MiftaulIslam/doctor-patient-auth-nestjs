@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { HttpStatus, Inject, Injectable, } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Req, } from '@nestjs/common';
 import { IGenericRepository } from 'src/domain/repositories/IRepository.repository';
 import { User } from 'generated/prisma';
 // import { MailService } from '../utils/mail.service';
@@ -14,6 +14,7 @@ import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
 import { CookieService } from 'src/infrastructure/utils/cookie.service';
 import { LoginDto, RegisterDoctorDto, RegisterPatientDto } from 'src/domain/dtos';
 import { ConfigService } from '@nestjs/config';
+import { MailService } from 'src/infrastructure/mailer/mailer.service';
 @Injectable()
 export class AuthService {
   constructor(
@@ -21,10 +22,13 @@ export class AuthService {
     @Inject('USER_REPO') private readonly userRepo: IGenericRepository<User>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private prisma: PrismaService,
-    // private readonly mailService:MailService,
+    private readonly mailService: MailService,
     private readonly jwtService: JwtService,
     private readonly cookieService: CookieService
   ) { }
+
+
+
   async registerPatient(dto: RegisterPatientDto): Promise<any> {
     const existingUser = await this.userRepo.findUnique({ email: dto.email });
 
@@ -35,26 +39,36 @@ export class AuthService {
     }
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     console.log(hashedPassword)
-    const token = this.jwtService.sign({ email: dto.email, name: dto.name });
+    const payload = {
+      email: dto.email,
+      name: dto.name,
+      password: dto.password,
+      role: "PATIENT",
+      contactNo: dto.contact,
+      gender: dto.gender,
+      bloodGroup: dto.bloodGroup,
+      age: dto.age,
+    }
+    const token = this.jwtService.sign(payload, { expiresIn: '24h' });
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        name: dto.name,
-        role: 'PATIENT',
-        patientProfile: {
-          create: {
-            contactNo: dto.contact,
-            gender: dto.gender,
-            bloodGroup: dto.bloodGroup,
-            age: dto.age
-          }
-        }
-      }
-    })
-
-    return { success: true, statusCode: HttpStatus.OK, message: 'Registration successful. Please check your email for verification.', data: { ...user, token } };
+    // const user = await this.prisma.user.create({
+    //   data: {
+    //     email: dto.email,
+    //     password: hashedPassword,
+    //     name: dto.name,
+    //     role: 'PATIENT',
+    //     patientProfile: {
+    //       create: {
+    //         contactNo: dto.contact,
+    //         gender: dto.gender,
+    //         bloodGroup: dto.bloodGroup,
+    //         age: dto.age
+    //       }
+    //     }
+    //   }
+    // })
+    await this.mailService.sendVerificationEmail(dto.email, token, 'patient')
+    return { success: true, statusCode: HttpStatus.OK, message: 'Registration successful. Please check your email for verification.', data: { token } };
 
   }
   async registerDoctor(dto: RegisterDoctorDto): Promise<any> {
@@ -66,46 +80,176 @@ export class AuthService {
     }
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     console.log(hashedPassword)
-    const token = this.jwtService.sign({ email: dto.email, name: dto.name });
-    //store temp registration data in memory
-    await this.cacheManager.set(token, JSON.stringify({
+    const payload = {
       email: dto.email,
-      password: hashedPassword,
       name: dto.name,
-      role: 'doctor',
+      password: dto.password,
+      role: "DOCTOR",
       specialty: dto.specialty,
-      licenseNo: dto.licenseNo
-    }), 60 * 60 * 24)
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        name: dto.name,
-        role: 'DOCTOR',
-        doctorProfile: {
-          create: {
-            specialty: dto.specialty,
-            licenseNo: dto.licenseNo
-          }
-        }
-      }
-    })
-    // await this.mailService.sendMail({
-    //   email: dto.email,
-    //   subject: 'Account Verification',
-    //   html: `Click the link to verify your account: ${process.env.BASE_URL}/auth/verify?${token}`,
-    // })
+      licenseNo: dto.licenseNo,
+    }
+    const token = this.jwtService.sign(payload, { expiresIn: '24h' });
 
-    return { success: true, statusCode: HttpStatus.OK, message: 'Registration successful. Please check your email for verification.', data: { ...user, token } };
+
+    await this.mailService.sendVerificationEmail(dto.email, token, 'doctor')
+
+    return { success: true, statusCode: HttpStatus.OK, message: 'Registration successful. Please check your email for verification.', data: { token } };
 
 
   }
 
+  async forgetPassword(dto: { email?: string }, @Req() req: Request): Promise<any> {
+    if (req.cookies.refresh_token) {
+      const decode = this.jwtService.verify(req.cookies.refresh_token, {
+        secret: process.env.JWT_REFRESH_SECRET
+      })
+      if (!decode) return {
+        success: false,
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Invalid token',
+      }
+      await this.mailService.sendPasswordResetEmail(decode.email, this.jwtService.sign({ email: decode.email },{
+        secret: this.config.get("JWT_SECRET"),
+        expiresIn: '15m',
+      }))
+
+      return {
+        success: true,
+        statusCode: HttpStatus.OK,
+        message: 'Password reset link sent to your email',
+        data: []
+      }
+    }
+
+    if (!dto.email) {
+      return {
+        success: false,
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Email is required',
+      };
+    }
+    await this.mailService.sendPasswordResetEmail(dto.email, this.jwtService.sign({ email: dto.email },{
+      secret: this.config.get("JWT_SECRET"),
+      expiresIn: '15m',
+    }))
+
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Password reset link sent to your email',
+      data: []
+    }
+  }
+
+  async resetPassword(query:{token:string}, dto:{password:string}){
+    const { token } = query;
+    if(!token || !dto.password) return {
+      success: false,
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Invalid request',
+    }
+    const decoded = this.jwtService.verify(token, {
+      secret: process.env.JWT_SECRET
+    })
+    if (!decoded) return {
+      success: false,
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Invalid token',
+    }
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.update({
+      where: {
+        email: decoded.email
+      },
+      data: {
+        password: hashedPassword
+      }
+    })
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Password reset successful',
+      data: user,
+    }
+  }
+
+logout (res:Response){
+  this.cookieService.clearCookie(res,'access_token')
+  this.cookieService.clearCookie(res,'refresh_token')
+  return {
+    success: true,
+    statusCode: HttpStatus.OK,
+    message: 'Logout successful',
+  }
+}
+
+  async verificationEmail(query: { token: string }): Promise<any> {
+
+    const { token } = query;
+    if (!token) return {
+      success: false,
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Invalid token',
+    }
+    const decoded = this.jwtService.verify(token, {
+      secret: process.env.JWT_SECRET
+    })
+    if (!decoded) return {
+      success: false,
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Invalid token',
+    }
+    if (decoded.role === 'DOCTOR') {
+      const doc = await this.prisma.user.create({
+        data: {
+          email: decoded.email,
+          password: decoded.password,
+          name: decoded.name,
+          role: decoded.role,
+          doctorProfile: {
+            create: {
+              specialty: decoded.specialty,
+              licenseNo: decoded.licenseNo,
+            }
+          }
+        }
+      })
+
+      return {
+        success: true,
+        statusCode: HttpStatus.OK,
+        message: 'Registration successful',
+        data: doc,
+      }
+    }
+    const patient = await this.prisma.user.create({
+      data: {
+        email: decoded.email,
+        password: decoded.password,
+        name: decoded.name,
+        role: decoded.role,
+        patientProfile: {
+          create: {
+            contactNo: decoded.contactNo,
+            gender: decoded.gender,
+            bloodGroup: decoded.bloodGroup,
+            age: decoded.age
+          }
+        }
+      }
+    })
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Registration successful',
+      data: patient,
+    }
+  }
 
 
   generateToken(data: { email: string; name: string; role: string }) {
     const accessToken = this.jwtService.sign(data, {
-      secret: this.config.get("JWT_SECRET") ,
+      secret: this.config.get("JWT_SECRET"),
       expiresIn: '1h', // Access token expires in 1 hour
     });
 
@@ -156,7 +300,7 @@ export class AuthService {
     };
   }
 
-  refresh(req:Request, res:Response):any{
+  refresh(req: Request, res: Response): any {
     const refreshToken = req.cookies.refresh_token;
     console.log(refreshToken)
     if (!refreshToken) {
@@ -166,26 +310,26 @@ export class AuthService {
         message: 'Unauthorized access',
       };
     }
-      const decoded = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET
-      })
-      console.log(decoded)
-      const newAccessToken = this.jwtService.sign({email:decoded.email, name:decoded.name, role:decoded.role},{
-        secret: process.env.JWT_SECRET,
-        expiresIn: '1h'
-      })
-      
-      this.cookieService.setCookie(res, 'access_token', newAccessToken, {
-        httpOnly: true,
-        maxAge: 1000 * 60 * 60, // 1 hour in milliseconds
-        sameSite:'strict',
-      })
-      return {
-        success: true,
-        statusCode: HttpStatus.OK,
-        message: 'Access token refreshed successfully',
-        data: {  email: decoded.email, name: decoded.name, role: decoded.role },
-      }
+    const decoded = this.jwtService.verify(refreshToken, {
+      secret: process.env.JWT_REFRESH_SECRET
+    })
+    console.log(decoded)
+    const newAccessToken = this.jwtService.sign({ email: decoded.email, name: decoded.name, role: decoded.role }, {
+      secret: process.env.JWT_SECRET,
+      expiresIn: '1h'
+    })
+
+    this.cookieService.setCookie(res, 'access_token', newAccessToken, {
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60, // 1 hour in milliseconds
+      sameSite: 'strict',
+    })
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Access token refreshed successfully',
+      data: { email: decoded.email, name: decoded.name, role: decoded.role },
+    }
   }
 
 }
