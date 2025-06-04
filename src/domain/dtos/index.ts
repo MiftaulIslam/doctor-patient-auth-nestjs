@@ -1,0 +1,5 @@
+export * from "./auth/login.dto"
+export * from "./auth/register-doctor.dto"
+export * from "./auth/register-patient.dto"
+export * from "./doctor/getAllDoc.dto"
+export * from "./patient/getAllPatient.dto"

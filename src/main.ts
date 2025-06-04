@@ -3,7 +3,6 @@ import { AppModule } from './modules/app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
-// import { AllExceptionsFilter } from './infrastructure/utils/error.handler';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   //exception handler
@@ -32,6 +31,16 @@ async function bootstrap() {
   .addTag('doctor')
   .addTag('patient')
   .addTag('auth')
+  .addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      name: 'Authorization',
+      in: 'header',
+    },
+    'access-token', 
+  )
   .build()
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);

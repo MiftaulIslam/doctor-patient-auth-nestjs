@@ -2,23 +2,22 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HttpStatus, Inject, Injectable, } from '@nestjs/common';
-// import { ErrorHandler } from '../utils/error.handler';
-import { PrismaService } from './prisma/prisma.service';
 import { IGenericRepository } from 'src/domain/repositories/IRepository.repository';
 import { User } from 'generated/prisma';
 // import { MailService } from '../utils/mail.service';
 import { JwtService } from '@nestjs/jwt';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { RegisterDoctorDto } from 'src/application/dtos/auth/register-doctor.dto';
 import * as bcrypt from 'bcrypt';
-import { RegisterPatientDto } from 'src/application/dtos/auth/register-patient.dto';
-import { LoginDto } from 'src/application/dtos/auth/login.dto';
-import { CookieService } from '../utils/cookie.service';
 import { Request, Response } from 'express';
+import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
+import { CookieService } from 'src/infrastructure/utils/cookie.service';
+import { LoginDto, RegisterDoctorDto, RegisterPatientDto } from 'src/domain/dtos';
+import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly config: ConfigService,
     @Inject('USER_REPO') private readonly userRepo: IGenericRepository<User>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private prisma: PrismaService,
@@ -106,18 +105,14 @@ export class AuthService {
 
   generateToken(data: { email: string; name: string; role: string }) {
     const accessToken = this.jwtService.sign(data, {
-      secret: process.env.JWT_SECRET,
+      secret: this.config.get("JWT_SECRET") ,
       expiresIn: '1h', // Access token expires in 1 hour
     });
 
     const refreshToken = this.jwtService.sign(data, {
-      secret: process.env.JWT_REFRESH_SECRET, // Use a different secret for refresh tokens
+      secret: this.config.get('JWT_REFRESH_SECRET'), // Use a different secret for refresh tokens
       expiresIn: '15d', // Refresh token expires in 15 days
     });
-    console.log("jwt-secret", process.env.JWT_SECRET)
-    console.log("jwt-refresh-secret", process.env.JWT_REFRESH_SECRET)
-    console.log("access token",accessToken)
-    console.log("refresh token",refreshToken)
     return { accessToken, refreshToken };
   }
 
@@ -130,7 +125,7 @@ export class AuthService {
         message: 'Invalid credentials',
       };
     }
-
+    console.log(this.config.get('JWT_SECRET'))
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
       return {

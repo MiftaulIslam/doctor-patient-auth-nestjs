@@ -1,8 +1,8 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Doctor, Prisma } from 'generated/prisma';
+import { GetAllDoctorsDto } from 'src/domain/dtos';
 import { IGenericRepository } from 'src/domain/repositories/IRepository.repository';
-import { PrismaService } from './prisma/prisma.service';
-import { GetAllDoctorsDto } from 'src/application/dtos/doctor/getAllDoc.dto';
+import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class DoctorService {

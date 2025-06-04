@@ -2,13 +2,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Body, Controller, Post, Req, Res } from '@nestjs/common';
-import { RegisterDoctorDto } from 'src/application/dtos/auth/register-doctor.dto';
-import { AuthService } from 'src/infrastructure/services/auth.service';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { RegisterPatientDto } from 'src/application/dtos/auth/register-patient.dto';
-import { LoginDto } from 'src/application/dtos/auth/login.dto';
+import {  ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { IResponse } from './auth.interface';
+import { RegisterDoctorDto } from 'src/domain/dtos/auth/register-doctor.dto';
+import { RegisterPatientDto } from 'src/domain/dtos/auth/register-patient.dto';
+import { LoginDto } from 'src/domain/dtos/auth/login.dto';
+import { AuthService } from 'src/application/services/auth.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -34,7 +34,6 @@ export class AuthController {
     const result = await this.authService.registerPatient(dto);
     res.status(result.statusCode).json(result);
     return result;
-    // return await this.authService.registerPatient(dto);
   }
 
 

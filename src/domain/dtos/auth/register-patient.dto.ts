@@ -10,15 +10,13 @@ export class RegisterPatientDto {
     message: 'Password must be at least 6 characters long, include one uppercase letter and one number',
   })
   password: string;
+
+
   @IsString()
   name: string;
 
   @IsString()
-  
-  @Matches(/^(?:\+?88)?01[3-9]\d{8}$/
-, {
-    message: 'Invalid mobile number, please follow the format: +8801XXXXXXXXX or 01XXXXXXXXX',
-  })
+  @Matches(/^(?:\+?88)?01[3-9]\d{8}$/,{ message: 'Invalid mobile number, please follow the format: +8801XXXXXXXXX or 01XXXXXXXXX',})
   contact: string;
 
   @IsString()
@@ -27,6 +25,7 @@ export class RegisterPatientDto {
 
   @IsInt()
   age: number
+
   @IsString()
-  gender: "male" | "female" | "other";
+  gender: "male" | "female";
 }

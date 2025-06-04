@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma/prisma.service';
 import { Prisma } from 'generated/prisma';
-import { GetAllPatientDto } from 'src/application/dtos/patient/getAllPatient.dto';
+import { GetAllPatientDto } from 'src/domain/dtos';
+import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class PatientService {
