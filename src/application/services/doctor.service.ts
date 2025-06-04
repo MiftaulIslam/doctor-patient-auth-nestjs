@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Doctor, Prisma } from 'generated/prisma';
 import { GetAllDoctorsDto } from 'src/domain/dtos';
+import { UpdateDoctorDto } from 'src/domain/dtos/doctor/update-doctor.dto';
 import { IGenericRepository } from 'src/domain/repositories/IRepository.repository';
 import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
 
@@ -14,7 +15,7 @@ export class DoctorService {
 
     }
 
-    
+
     async getAllDoctors(query: GetAllDoctorsDto): Promise<any> {
         const {
             id,
@@ -79,6 +80,48 @@ export class DoctorService {
                 limit,
                 totalPages: Math.ceil(total / limit),
             }
+        };
+    }
+
+
+    async deleteDoctor(id: string): Promise<any> {
+        const deleteUser = await this.prisma.doctor.delete({
+            where: {
+                id
+            },
+        })
+
+        return {
+            success: true,
+            message: 'Doctor deleted successfully',
+            statusCode: HttpStatus.OK,
+            data: deleteUser
+        };
+
+    }
+
+    async updateDoctor(id: string, dto: UpdateDoctorDto): Promise<any> {
+        const updatedDoctor = await this.prisma.user.update({
+            where: { id },
+            data: {
+                name: dto.name,
+                doctorProfile: {
+                    update: {
+                        specialty: dto.specialty,
+                        licenseNo: dto.licenseNo,
+                    },
+                },
+            },
+            include: {
+                doctorProfile: true,
+            },
+        });
+
+        return {
+            success: true,
+            message: 'Doctor information updated successfully',
+            statusCode: HttpStatus.OK,
+            data: updatedDoctor
         };
     }
 }

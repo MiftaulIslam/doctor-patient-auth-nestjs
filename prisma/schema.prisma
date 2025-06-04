@@ -54,4 +54,6 @@ model Patient {
 enum Role {
   DOCTOR
   PATIENT
+  ADMIN
+  SUPERADMIN
 }

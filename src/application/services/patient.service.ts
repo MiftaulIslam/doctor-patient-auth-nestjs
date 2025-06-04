@@ -1,15 +1,16 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
 import { GetAllPatientDto } from 'src/domain/dtos';
+import { UpdatePatientDto } from 'src/domain/dtos/patient/update-patient.dto';
 import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class PatientService {
     constructor(
         private prisma: PrismaService
-    ) {}
+    ) { }
 
-    
+
     async getAllPatient(query: GetAllPatientDto): Promise<any> {
         const {
             id,
@@ -22,12 +23,12 @@ export class PatientService {
 
         // Search by ID (shortcut)
         if (id) {
-            const doctor = await this.prisma.doctor.findUnique({ where: { id }, include: { user: true } });
-            return doctor ? {
+            const patient = await this.prisma.patient.findUnique({ where: { id }, include: { user: true } });
+            return patient ? {
                 success: true,
                 message: 'patient retrieved successfully',
                 statusCode: HttpStatus.OK,
-                data: [doctor]
+                data: [patient]
             } : {
                 success: false,
                 message: 'patient not found',
@@ -68,7 +69,7 @@ export class PatientService {
             message: 'patients retrieved successfully',
             statusCode: HttpStatus.OK,
             data: {
-                doctors: data,
+                patients: data,
                 total,
                 page,
                 limit,
@@ -77,4 +78,47 @@ export class PatientService {
         };
     }
 
+
+    async deletePatient(id: string): Promise<any> {
+        const deleteUser = await this.prisma.patient.delete({
+            where: {
+                id
+            },
+        })
+
+        return {
+            success: true,
+            message: 'patient deleted successfully',
+            statusCode: HttpStatus.OK,
+            data: deleteUser
+        };
+
+    }
+
+    async updatePatient(id: string, dto: UpdatePatientDto): Promise<any> {
+        const updatedPatient = await this.prisma.user.update({
+            where: { id },
+            data: {
+                name: dto.name,
+                patientProfile: {
+                    update: {  
+                        contactNo: dto.contact,
+                        gender: dto.gender,
+                        bloodGroup: dto.bloodGroup,
+                        age: dto.age,
+                    }
+                }
+            },
+            include: {
+                patientProfile: true
+            }
+        });
+
+        return {
+            success: true,
+            message: 'Patient information updated successfully',
+            statusCode: HttpStatus.OK,
+            data: updatedPatient
+        };
+    }
 }

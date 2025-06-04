@@ -6,8 +6,6 @@ import { IGenericRepository } from 'src/domain/repositories/IRepository.reposito
 import { User } from 'generated/prisma';
 // import { MailService } from '../utils/mail.service';
 import { JwtService } from '@nestjs/jwt';
-import { Cache } from 'cache-manager';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as bcrypt from 'bcrypt';
 import { Request, Response } from 'express';
 import { PrismaService } from 'src/infrastructure/prisma/prisma.service';
@@ -15,19 +13,41 @@ import { CookieService } from 'src/infrastructure/utils/cookie.service';
 import { LoginDto, RegisterDoctorDto, RegisterPatientDto } from 'src/domain/dtos';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from 'src/infrastructure/mailer/mailer.service';
+import { UserDto } from 'src/domain/dtos/auth/user.dto';
 @Injectable()
 export class AuthService {
   constructor(
     private readonly config: ConfigService,
     @Inject('USER_REPO') private readonly userRepo: IGenericRepository<User>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
     private readonly cookieService: CookieService
   ) { }
-
-
+  
+  async createAdmin(dto:UserDto): Promise<any> {
+    const existingUser = await this.userRepo.findUnique({ email: dto.email });
+    if (existingUser) return {
+      success: false,
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Email already exists',
+    }
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data:{
+        email: dto.email,
+        name: dto.name,
+        password: hashedPassword,
+        role: "ADMIN",
+      }
+    })
+    return{
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Admin created successfully',
+      data: user,
+    }
+  }
 
   async registerPatient(dto: RegisterPatientDto): Promise<any> {
     const existingUser = await this.userRepo.findUnique({ email: dto.email });
@@ -38,11 +58,10 @@ export class AuthService {
       message: 'Email already exists',
     }
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    console.log(hashedPassword)
     const payload = {
       email: dto.email,
       name: dto.name,
-      password: dto.password,
+      password: hashedPassword,
       role: "PATIENT",
       contactNo: dto.contact,
       gender: dto.gender,
@@ -51,22 +70,6 @@ export class AuthService {
     }
     const token = this.jwtService.sign(payload, { expiresIn: '24h' });
 
-    // const user = await this.prisma.user.create({
-    //   data: {
-    //     email: dto.email,
-    //     password: hashedPassword,
-    //     name: dto.name,
-    //     role: 'PATIENT',
-    //     patientProfile: {
-    //       create: {
-    //         contactNo: dto.contact,
-    //         gender: dto.gender,
-    //         bloodGroup: dto.bloodGroup,
-    //         age: dto.age
-    //       }
-    //     }
-    //   }
-    // })
     await this.mailService.sendVerificationEmail(dto.email, token, 'patient')
     return { success: true, statusCode: HttpStatus.OK, message: 'Registration successful. Please check your email for verification.', data: { token } };
 
@@ -79,11 +82,10 @@ export class AuthService {
       message: 'Email already exists',
     }
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    console.log(hashedPassword)
     const payload = {
       email: dto.email,
       name: dto.name,
-      password: dto.password,
+      password: hashedPassword,
       role: "DOCTOR",
       specialty: dto.specialty,
       licenseNo: dto.licenseNo,
@@ -192,7 +194,7 @@ logout (res:Response){
       message: 'Invalid token',
     }
     const decoded = this.jwtService.verify(token, {
-      secret: process.env.JWT_SECRET
+      secret: process.env.JWT_SECRET, 
     })
     if (!decoded) return {
       success: false,
@@ -269,7 +271,6 @@ logout (res:Response){
         message: 'Invalid credentials',
       };
     }
-    console.log(this.config.get('JWT_SECRET'))
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
       return {
@@ -302,7 +303,6 @@ logout (res:Response){
 
   refresh(req: Request, res: Response): any {
     const refreshToken = req.cookies.refresh_token;
-    console.log(refreshToken)
     if (!refreshToken) {
       return {
         success: false,
@@ -313,7 +313,6 @@ logout (res:Response){
     const decoded = this.jwtService.verify(refreshToken, {
       secret: process.env.JWT_REFRESH_SECRET
     })
-    console.log(decoded)
     const newAccessToken = this.jwtService.sign({ email: decoded.email, name: decoded.name, role: decoded.role }, {
       secret: process.env.JWT_SECRET,
       expiresIn: '1h'

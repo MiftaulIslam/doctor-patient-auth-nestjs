@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   CanActivate,
@@ -18,8 +20,9 @@ export class RoleGuard implements CanActivate {
       context.getClass(),
     ]);
     if (!roles) return true;
-
+    
     const request = context.switchToHttp().getRequest();
-    return roles.includes(request.user.role);
+  
+    return roles.includes(request?.user.role) || request?.user.role === Role.SUPERADMIN;
   }
 }
